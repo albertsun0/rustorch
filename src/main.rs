@@ -44,25 +44,20 @@ fn main() {
         vec![6.0, 18.0, 3.0, 2.0, 12.0, 1.0, 4.0, 15.0, 3.0],
     );
 
-    // let (P, L, U) = t6.lu();
-    // println!("{}", P.to_string());
-    // println!("{}", L.to_string());
-    // println!("{}", U.to_string());
-
     let t7 = Tensor2::from_vec(
         vec![3, 3],
-        vec![1.0, 2.0, -3.0, 1.0, 2.0, 4.0, 0.0, 7.0, -1.0],
+        vec![2.0, -2.0, 1.0, 1.0, 3.0, -2.0, 3.0, -1.0, -1.0],
     );
 
-    let (P, L, U, _) = t7.plu();
-    println!("{}", P.to_string());
-    println!("{}", L.to_string());
-    println!("{}", U.to_string());
+    let mut b: Tensor2<f64> = Tensor2::from_vec(vec![3, 1], vec![-3.0, 1.0, 2.0]);
 
-    let X = L.mult(&U);
-    let Y = P.mult(&t7);
-    println!("{}", X.to_string());
-    println!("{}", Y.to_string());
+    //solve t7x = b
+    print!("{}", t7.system_solve(&b).to_string());
 
-    println!("{}", t7.det());
+    let t7_inv = t7.inverse();
+    print!("{}", t7_inv.to_string());
+
+    print!("{}", t7.mult(&t7_inv).to_string());
 }
+
+// -7, -10, -21

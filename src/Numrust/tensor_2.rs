@@ -238,10 +238,76 @@ impl<T: TensorNumber> Tensor2<T> {
         }
         result
     }
+    // lower triangular, diagonal = 1
+    pub fn forward_substitution(&self, b: &Tensor2<T>) -> Tensor2<T> {
+        assert!(self.rows() == b.rows(), "matrix dimensions don't match");
+        let mut result = b.copy();
 
-    // forward substitution
-    // backward substitution
-    // inverse
+        for i in 1..self.rows() {
+            for j in 0..i {
+                let multiplier = self.get(&[i, j]).clone();
+                for k in 0..b.cols() {
+                    result.set(
+                        &[i, k],
+                        result.get(&[i, k]).clone() - multiplier * result.get(&[j, k]).clone(),
+                    );
+                }
+            }
+        }
+
+        result
+    }
+    // upper triangular, diagonal any
+    pub fn backward_substitution(&self, b: &Tensor2<T>) -> Tensor2<T> {
+        assert!(self.rows() == b.rows(), "matrix dimensions don't match");
+        let mut result = b.copy();
+
+        for i in (0..self.rows() - 1).rev() {
+            for j in i + 1..self.rows() {
+                let multiplier = self.get(&[i, j]).clone();
+                for k in 0..b.cols() {
+                    result.set(
+                        &[i, k],
+                        result.get(&[i, k]).clone() - multiplier * result.get(&[j, k]).clone(),
+                    );
+                }
+            }
+
+            // divide by diagonal
+            let d = self.get(&[i, i]).clone();
+            for k in 0..b.cols() {
+                result.set(&[i, k], result.get(&[i, k]).clone() / d.clone());
+            }
+        }
+
+        result
+    }
+
+    /*
+       solve PA = Pb = LUx
+    */
+    pub fn system_solve(&self, b: &Tensor2<T>) -> Tensor2<T> {
+        let (p, l, u, _) = self.plu();
+
+        let b_permute = p.mult(&b);
+        let intermediate = l.forward_substitution(&b_permute);
+        u.backward_substitution(&intermediate)
+    }
+
+    /*
+       Inverse
+       A = PLU, want X st. AX = I
+        > PLUX = I
+        > UX = L^-1 P^-1
+        > solve using forward and backward substitution
+    */
+    pub fn inverse(&self) -> Tensor2<T> {
+        let (p, l, u, _) = self.plu();
+
+        let y = l.forward_substitution(&p);
+        u.backward_substitution(&y)
+    }
+
     // eigenvalues
 }
 
