@@ -1,6 +1,6 @@
 use std::fmt;
 
-use std::ops::{Add, Div, Mul, Sub};
+use std::ops::{Add, Div, Mul, Sub,Neg};
 
 /// Trait for types usable in tensors
 pub trait TensorNumber:
@@ -9,30 +9,19 @@ pub trait TensorNumber:
     + Sub<Output = Self>
     + Mul<Output = Self>
     + Div<Output = Self>
+    + Neg<Output = Self> 
     + Default          // for zero value
     + PartialEq        // equality comparisons
     + std::fmt::Debug  // for logging
+    + std::cmp::PartialOrd
+    + std::ops::Neg
+    + std::ops::MulAssign
 {
     fn rand() -> Self;
     fn one() -> Self;
+    fn abs(self) -> Self;
 }
 
-// impl<T> TensorNumber for T
-// where
-//     T: Copy
-//         + Add<Output = T>
-//         + Sub<Output = T>
-//         + Mul<Output = T>
-//         + Div<Output = T>
-//         + Default
-//         + PartialEq
-//         + std::fmt::Debug,
-// {
-//     // TODO: Implement pseudorandom generator for TensorNumber
-//     fn rand() -> Self {
-//         Self::default()
-//     }
-// }
 
 macro_rules! impl_tensor_number {
     ($($t:ty),*) => {
@@ -41,12 +30,13 @@ macro_rules! impl_tensor_number {
                 fn one() -> Self { 1 as $t }
                 // TODO: Implement pseudorandom generator for TensorNumber
                 fn rand() -> Self { 1 as $t }
+                fn abs(self) -> Self { <$t>::abs(self) }
             }
         )*
     };
 }
 
-impl_tensor_number!(i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, usize, f32, f64);
+impl_tensor_number!(i8, i16, i32, i64, i128, isize, f32, f64);
 
 pub trait TensorBase<T: TensorNumber> {
     fn shape(&self) -> Vec<usize>;
@@ -73,7 +63,7 @@ pub trait TensorBase<T: TensorNumber> {
 
     /// Default method: set a value
     fn set(&mut self, indices: &[usize], val: T) {
-        let idx = self.flatten_index(indices);
+        let idx: usize = self.flatten_index(indices);
         self.data_mut()[idx] = val;
     }
 }

@@ -25,7 +25,7 @@ impl<T: TensorNumber + Clone> TensorBase<T> for Tensor2<T> {
             indices[1],
             self.shape
         );
-        indices[0] * self.shape[1] + indices[1]
+        indices[0] * self.cols() + indices[1]
     }
 
     fn to_string(&self) -> String {
@@ -67,12 +67,35 @@ impl<T: TensorNumber> Tensor2<T> {
         }
     }
 
+    pub fn is_square(&self) -> bool {
+        self.shape[0] == self.shape[1]
+    }
+
+    pub fn square(n: usize) -> Tensor2<T> {
+        Tensor2::from_vec(vec![n, n], vec![T::default(); n * n])
+    }
+
     pub fn identity(n: usize) -> Tensor2<T> {
         let mut data = vec![T::default(); n * n];
         for i in 0..n {
             data[i * n + i] = T::one();
         }
         Tensor2::from_vec(vec![n, n], data)
+    }
+
+    pub fn copy(&self) -> Tensor2<T> {
+        Tensor2 {
+            shape: self.shape.clone(),
+            data: self.data.clone(),
+        }
+    }
+
+    pub fn rows(&self) -> usize {
+        self.shape[0]
+    }
+
+    pub fn cols(&self) -> usize {
+        self.shape[1]
     }
 
     pub fn scalar_mul(self, rhs: T) -> Tensor2<T> {
@@ -97,6 +120,7 @@ impl<T: TensorNumber> Tensor2<T> {
 
         Tensor2::from_vec(new_shape, new_data)
     }
+
     // TODO: chunking and SIMD optimization
     pub fn mult(&self, other: &Tensor2<T>) -> Tensor2<T> {
         assert!(
@@ -125,7 +149,100 @@ impl<T: TensorNumber> Tensor2<T> {
 
         result
     }
-    // TODO: inverse, determinant
+
+    /*
+       Prepare for LU decomposition by swapping rows
+    */
+    pub fn swap_rows(&mut self, mut i: usize, mut j: usize) {
+        if i == j {
+            return;
+        }
+
+        let cols = self.cols();
+
+        if j < i {
+            std::mem::swap(&mut i, &mut j);
+        }
+
+        let (a, b) = self.data.split_at_mut(j * cols);
+        let row_i = &mut a[i * cols..(i + 1) * cols];
+        let row_j = &mut b[..cols];
+
+        row_i.swap_with_slice(row_j);
+    }
+    /*
+       Calculate P, L, U st. PA = LU
+    */
+    pub fn plu(&self) -> (Tensor2<T>, Tensor2<T>, Tensor2<T>, usize) {
+        let rows = self.rows();
+        let mut L = Tensor2::square(self.shape[0]);
+        let mut U = self.copy();
+        let mut permutation = Tensor2::identity(rows);
+        let mut swaps = 0;
+
+        for i in 0..rows - 1 {
+            // set pivot & swap
+            let mut max_row = i;
+            let mut max_value = U.get(&[i, i]).clone().abs();
+            for j in i + 1..rows {
+                let row_value = U.get(&[j, i]).clone().abs();
+                if row_value > max_value {
+                    max_row = j;
+                    max_value = row_value;
+                }
+            }
+
+            if max_row != i {
+                swaps += 1;
+                permutation.swap_rows(i, max_row);
+                U.swap_rows(i, max_row);
+                L.swap_rows(i, max_row);
+            }
+
+            let val = U.get(&[i, i]).clone();
+            assert!(val != T::default(), "matrix is singular");
+
+            // set column in L
+            for j in i + 1..rows {
+                L.set(&[j, i], U.get(&[j, i]).clone() / val.clone());
+            }
+
+            // set U
+            for j in i + 1..rows {
+                for k in i..self.cols() {
+                    let prev = U.get(&[i, k]).clone();
+                    let multiplier = L.get(&[j, i]).clone();
+                    let cur = U.get(&[j, k]).clone();
+                    U.set(&[j, k], cur - prev * multiplier);
+                }
+            }
+        }
+        // set diagonal of L
+        for i in 0..rows {
+            L.set(&[i, i], T::one());
+        }
+
+        (permutation, L, U, swaps)
+    }
+
+    pub fn det(&self) -> T {
+        assert!(self.is_square(), "matrix is not square");
+
+        let (_, _, u, swaps) = self.plu();
+        let mut result = T::one();
+        for i in 0..self.rows() {
+            result *= u.get(&[i, i]).clone();
+        }
+        if swaps % 2 == 1 {
+            return -result;
+        }
+        result
+    }
+
+    // forward substitution
+    // backward substitution
+    // inverse
+    // eigenvalues
 }
 
 // scalar multiplication
@@ -159,5 +276,11 @@ impl<'a, T: TensorNumber> ops::Add<T> for &'a Tensor2<T> {
     fn add(self, rhs: T) -> Self::Output {
         let data = self.data.iter().map(|&x| x + rhs).collect();
         Tensor2::from_vec(self.shape.clone(), data)
+    }
+}
+
+impl<T: TensorNumber> PartialEq for Tensor2<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.shape == other.shape && self.data == other.data
     }
 }
