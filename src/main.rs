@@ -40,12 +40,23 @@ fn main() {
     let mut b: Tensor2<f64> = Tensor2::from_vec(vec![3, 1], vec![-3.0, 1.0, 2.0]);
 
     //solve t7x = b
-    print!("{}", t7.system_solve(&b).to_string());
+    println!("{}", t7.system_solve(&b).to_string());
 
     let t7_inv = t7.inverse();
-    print!("{}", t7_inv.to_string());
+    println!("{}", t7_inv.to_string());
 
-    print!("{}", t7.mult(&t7_inv).to_string());
+    println!("{}", t7.mult(&t7_inv).to_string());
+
+    let t8 = Tensor2::from_vec(
+        vec![3, 3],
+        vec![2.0, -2.0, 1.0, 1.0, 3.0, -2.0, 3.0, -1.0, -1.0],
+    );
+
+    let (q, r) = t8.qr_decompose();
+    println!("Q: {}", q.to_string());
+    println!("R: {}", r.to_string());
+    println!("Q*R: {}", q.mult(&r).to_string());
+    print!("Q*Q^T: {}", q.mult(&q.transpose()).to_string());
 }
 
 // -7, -10, -21

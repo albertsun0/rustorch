@@ -349,38 +349,72 @@ impl<T: TensorNumber> Tensor2<T> {
         u.backward_substitution(&y)
     }
 
-    // QR factorization
-
     /*
-       x x x    x x x
-       x x x -> 0 x x
-       x x x    0 x x
+        QR decomposition
 
-        Find household transformation that maps first column to multiple of first unit basis vector
+        Q is a orthogonal matrix (QQ^T = I)
+        R is an upper triangular matrix
+
+        On each update
+
+        x x x    x x x
+        x x x -> 0 x x
+        x x x    0 x x
+
+        Find householder transformation (mirror) H that maps first column to multiple of first unit basis vector
+
+        R = HHHHH...A
+        Q = IHHHHH... (since H^-1 = H)
+
+        REF: https://www.cs.utexas.edu/~flame/laff/alaff/chapter03-householder-transformation.html
     */
     pub fn qr_decompose(&self) -> (Tensor2<T>, Tensor2<T>) {
-        let mut A = self.copy();
+        let mut R = self.copy();
         let rows = self.rows();
         let cols = self.cols();
 
         let mut Q: Tensor2<T> = Tensor2::identity(rows);
 
         for col in 0..rows.min(cols) {
-            let mut x = A.get_col(col);
-            let beta = x.norm();
+            // compute u on a submatrix/subcolumn for efficiency
+            let mut x_sub = Tensor2::<T>::new(rows - col, 1);
+            for i in col..rows {
+                x_sub.set(&[i - col, 0], R.get(&[i, col]).clone());
+            }
+
+            let beta = x_sub.norm();
             if beta == T::default() {
                 continue;
             }
-            x.set(&[col, 0], x.get(&[0]).clone() + beta);
-            let norm_v = x.norm();
-            let u = x * (T::one() / norm_v);
+
+            let sign = if x_sub.get(&[0, 0]).clone() >= T::default() {
+                T::one()
+            } else {
+                -T::one()
+            };
+
+            x_sub.set(&[0, 0], x_sub.get(&[0, 0]).clone() + sign * beta);
+
+            let norm_v = x_sub.norm();
+
+            if norm_v == T::default() {
+                continue;
+            }
+
+            let u_sub = x_sub * (T::one() / norm_v);
+            // turn u_sub into tall matrix
+            let mut u = Tensor2::<T>::new(rows, 1);
+            for i in 0..(rows - col) {
+                u.set(&[i + col, 0], u_sub.get(&[i, 0]).clone());
+            }
+
             let H = Tensor2::identity(rows) - u.mult(&u.transpose()) * T::from(2.0);
 
-            A = H.mult(&A);
+            R = H.mult(&R);
             Q = Q.mult(&H);
         }
 
-        (Q.transpose(), A)
+        (Q, R)
     }
     // eigenvalues
 }
