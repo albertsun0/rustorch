@@ -1,5 +1,8 @@
-use crate::numrust::tensor_base::{TensorBase, TensorNumber};
-use std::ops;
+use crate::numrust::{
+    tensor::Tensor,
+    tensor_base::{TensorBase, TensorNumber},
+};
+use std::{ops, vec};
 
 pub struct Tensor2<T: TensorNumber> {
     shape: Vec<usize>,
@@ -67,10 +70,6 @@ impl<T: TensorNumber> Tensor2<T> {
         }
     }
 
-    pub fn is_square(&self) -> bool {
-        self.shape[0] == self.shape[1]
-    }
-
     pub fn square(n: usize) -> Tensor2<T> {
         Tensor2::from_vec(vec![n, n], vec![T::default(); n * n])
     }
@@ -90,6 +89,7 @@ impl<T: TensorNumber> Tensor2<T> {
         }
     }
 
+    // getters
     pub fn rows(&self) -> usize {
         self.shape[0]
     }
@@ -98,6 +98,24 @@ impl<T: TensorNumber> Tensor2<T> {
         self.shape[1]
     }
 
+    // derived properties
+    pub fn is_square(&self) -> bool {
+        self.shape[0] == self.shape[1]
+    }
+
+    pub fn is_upper_triangular(&self, tol: T) -> bool {
+        for i in 0..self.shape[0] {
+            for j in 0..i {
+                if self.get(&[i, j]).clone().abs() > tol {
+                    return false;
+                }
+            }
+        }
+
+        true
+    }
+
+    // operations
     pub fn scalar_mul(&self, rhs: T) -> Tensor2<T> {
         let data = self.data.iter().map(|&x| x * rhs).collect();
         Tensor2::from_vec(self.shape.clone(), data)
@@ -415,6 +433,37 @@ impl<T: TensorNumber> Tensor2<T> {
         }
 
         (Q, R)
+    }
+
+    pub fn eigenvalues_naive(&self) -> Option<Tensor2<T>> {
+        assert!(self.is_square(), "matrix is not square");
+
+        let max_iter = 300;
+        let tol = T::from(1e-12);
+        let mut A = self.copy();
+        let mut result = false;
+
+        for _ in 0..max_iter {
+            let (q, r) = A.qr_decompose();
+            A = r.mult(&q);
+            if A.is_upper_triangular(tol) {
+                result = true;
+                break;
+            }
+        }
+
+        if !result {
+            return None;
+        }
+
+        println!("DEBUG: Eigenvalues_naive converged, A: {}\n", A.to_string());
+
+        let mut result = Tensor2::new(A.rows(), 1);
+        for i in 0..A.rows() {
+            result.set(&[i, 0], A.get(&[i, i]).clone());
+        }
+
+        Some(result)
     }
     // eigenvalues
 }

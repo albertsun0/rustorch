@@ -56,7 +56,13 @@ fn main() {
     println!("Q: {}", q.to_string());
     println!("R: {}", r.to_string());
     println!("Q*R: {}", q.mult(&r).to_string());
-    print!("Q*Q^T: {}", q.mult(&q.transpose()).to_string());
+    println!("Q*Q^T: {}", q.mult(&q.transpose()).to_string());
+
+    let eigenvalues = t8.eigenvalues_naive();
+    match eigenvalues {
+        Some(eigenvalues) => println!("Eigenvalues: {}", eigenvalues.to_string()),
+        None => println!("No eigenvalues found"),
+    }
 }
 
 // -7, -10, -21
