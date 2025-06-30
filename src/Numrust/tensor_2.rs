@@ -98,14 +98,49 @@ impl<T: TensorNumber> Tensor2<T> {
         self.shape[1]
     }
 
-    pub fn scalar_mul(self, rhs: T) -> Tensor2<T> {
+    pub fn scalar_mul(&self, rhs: T) -> Tensor2<T> {
         let data = self.data.iter().map(|&x| x * rhs).collect();
         Tensor2::from_vec(self.shape.clone(), data)
     }
 
-    pub fn scalar_add(self, rhs: T) -> Tensor2<T> {
+    pub fn scalar_add(&self, rhs: T) -> Tensor2<T> {
         let data = self.data.iter().map(|&x| x + rhs).collect();
         Tensor2::from_vec(self.shape.clone(), data)
+    }
+
+    pub fn tensor_add(&self, other: &Tensor2<T>) -> Tensor2<T> {
+        assert!(self.shape == other.shape, "shape mismatch");
+        let data = self
+            .data
+            .iter()
+            .zip(other.data.iter())
+            .map(|(&x, &y)| x + y)
+            .collect();
+        Tensor2::from_vec(self.shape.clone(), data)
+    }
+
+    pub fn norm(&self) -> T {
+        let mut sum = T::default();
+        for x in &self.data {
+            sum = sum + x.clone() * x.clone();
+        }
+        sum.sqrt()
+    }
+
+    pub fn get_row(&self, i: usize) -> Tensor2<T> {
+        let mut data = vec![T::default(); self.shape[1]];
+        for j in 0..self.shape[1] {
+            data[j] = self.data[i * self.shape[1] + j].clone();
+        }
+        Tensor2::from_vec(vec![1, self.shape[1]], data)
+    }
+
+    pub fn get_col(&self, i: usize) -> Tensor2<T> {
+        let mut data = vec![T::default(); self.shape[0]];
+        for j in 0..self.shape[0] {
+            data[j] = self.data[j * self.shape[1] + i].clone();
+        }
+        Tensor2::from_vec(vec![self.shape[0], 1], data)
     }
 
     pub fn transpose(&self) -> Tensor2<T> {
@@ -238,7 +273,8 @@ impl<T: TensorNumber> Tensor2<T> {
         }
         result
     }
-    // lower triangular, diagonal = 1
+
+    // find x st. Ax = b, when A is lower triangular, diagonal 1
     pub fn forward_substitution(&self, b: &Tensor2<T>) -> Tensor2<T> {
         assert!(self.rows() == b.rows(), "matrix dimensions don't match");
         let mut result = b.copy();
@@ -257,6 +293,7 @@ impl<T: TensorNumber> Tensor2<T> {
 
         result
     }
+
     // upper triangular, diagonal any
     pub fn backward_substitution(&self, b: &Tensor2<T>) -> Tensor2<T> {
         assert!(self.rows() == b.rows(), "matrix dimensions don't match");
@@ -283,15 +320,19 @@ impl<T: TensorNumber> Tensor2<T> {
         result
     }
 
-    /*
-       solve PA = Pb = LUx
-    */
     pub fn system_solve(&self, b: &Tensor2<T>) -> Tensor2<T> {
+        /*
+           solve Ax = b
+           > decompose A st. PA = LU, or A = P^-1 LU
+           > LUx = Pb
+           > x = U^-1 L^-1 Pb
+                > y = L^-1 Pb > Ly = Pb > forward substitution
+        */
         let (p, l, u, _) = self.plu();
 
         let b_permute = p.mult(&b);
-        let intermediate = l.forward_substitution(&b_permute);
-        u.backward_substitution(&intermediate)
+        let y = l.forward_substitution(&b_permute);
+        u.backward_substitution(&y)
     }
 
     /*
@@ -308,6 +349,39 @@ impl<T: TensorNumber> Tensor2<T> {
         u.backward_substitution(&y)
     }
 
+    // QR factorization
+
+    /*
+       x x x    x x x
+       x x x -> 0 x x
+       x x x    0 x x
+
+        Find household transformation that maps first column to multiple of first unit basis vector
+    */
+    pub fn qr_decompose(&self) -> (Tensor2<T>, Tensor2<T>) {
+        let mut A = self.copy();
+        let rows = self.rows();
+        let cols = self.cols();
+
+        let mut Q: Tensor2<T> = Tensor2::identity(rows);
+
+        for col in 0..rows.min(cols) {
+            let mut x = A.get_col(col);
+            let beta = x.norm();
+            if beta == T::default() {
+                continue;
+            }
+            x.set(&[col, 0], x.get(&[0]).clone() + beta);
+            let norm_v = x.norm();
+            let u = x * (T::one() / norm_v);
+            let H = Tensor2::identity(rows) - u.mult(&u.transpose()) * T::from(2.0);
+
+            A = H.mult(&A);
+            Q = Q.mult(&H);
+        }
+
+        (Q.transpose(), A)
+    }
     // eigenvalues
 }
 
@@ -340,13 +414,79 @@ impl<'a, T: TensorNumber> ops::Add<T> for &'a Tensor2<T> {
     type Output = Tensor2<T>;
 
     fn add(self, rhs: T) -> Self::Output {
-        let data = self.data.iter().map(|&x| x + rhs).collect();
-        Tensor2::from_vec(self.shape.clone(), data)
+        let temp = self.copy();
+        temp.scalar_add(rhs)
+    }
+}
+// scalar subtraction
+impl<T: TensorNumber> ops::Sub<T> for Tensor2<T> {
+    type Output = Tensor2<T>;
+
+    fn sub(self, rhs: T) -> Self::Output {
+        self.scalar_add(rhs * -T::one())
+    }
+}
+impl<'a, T: TensorNumber> ops::Sub<T> for &'a Tensor2<T> {
+    type Output = Tensor2<T>;
+
+    fn sub(self, rhs: T) -> Self::Output {
+        let temp = self.copy();
+        temp.scalar_add(rhs * -T::one())
     }
 }
 
+// equals
 impl<T: TensorNumber> PartialEq for Tensor2<T> {
     fn eq(&self, other: &Self) -> bool {
         self.shape == other.shape && self.data == other.data
+    }
+}
+
+// tensor 2 addition
+impl<T: TensorNumber> ops::Add<Tensor2<T>> for Tensor2<T> {
+    type Output = Tensor2<T>;
+
+    fn add(self, rhs: Tensor2<T>) -> Self::Output {
+        self.tensor_add(&rhs)
+    }
+}
+impl<'a, T: TensorNumber> ops::Add<Tensor2<T>> for &'a Tensor2<T> {
+    type Output = Tensor2<T>;
+
+    fn add(self, rhs: Tensor2<T>) -> Self::Output {
+        let temp = self.copy();
+        temp.tensor_add(&rhs)
+    }
+}
+
+impl<T: TensorNumber> ops::Sub<Tensor2<T>> for Tensor2<T> {
+    type Output = Tensor2<T>;
+
+    fn sub(self, rhs: Tensor2<T>) -> Self::Output {
+        self.tensor_add(&(rhs * -T::one()))
+    }
+}
+impl<'a, T: TensorNumber> ops::Sub<Tensor2<T>> for &'a Tensor2<T> {
+    type Output = Tensor2<T>;
+
+    fn sub(self, rhs: Tensor2<T>) -> Self::Output {
+        let temp = self.copy();
+        temp.tensor_add(&(rhs * -T::one()))
+    }
+}
+
+impl<T: TensorNumber> ops::Mul<&Tensor2<T>> for Tensor2<T> {
+    type Output = Tensor2<T>;
+
+    fn mul(self, rhs: &Tensor2<T>) -> Self::Output {
+        self.mult(&rhs)
+    }
+}
+impl<'a, T: TensorNumber> ops::Mul<&Tensor2<T>> for &'a Tensor2<T> {
+    type Output = Tensor2<T>;
+
+    fn mul(self, rhs: &Tensor2<T>) -> Self::Output {
+        let temp = self.copy();
+        temp.mult(&rhs)
     }
 }

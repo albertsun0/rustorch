@@ -1,6 +1,6 @@
 use std::fmt;
 
-use std::ops::{Add, Div, Mul, Sub,Neg};
+use std::ops::{Add, Div, Mul, Sub, Neg};
 
 /// Trait for types usable in tensors
 pub trait TensorNumber:
@@ -20,6 +20,8 @@ pub trait TensorNumber:
     fn rand() -> Self;
     fn one() -> Self;
     fn abs(self) -> Self;
+    fn sqrt(self) -> Self;
+    fn from(x: f64) -> Self;
 }
 
 
@@ -27,16 +29,20 @@ macro_rules! impl_tensor_number {
     ($($t:ty),*) => {
         $(
             impl TensorNumber for $t {
+                fn from(x: f64) -> Self { x as $t }
                 fn one() -> Self { 1 as $t }
                 // TODO: Implement pseudorandom generator for TensorNumber
                 fn rand() -> Self { 1 as $t }
                 fn abs(self) -> Self { <$t>::abs(self) }
+                 fn sqrt(self) -> Self {
+                    <$t>::sqrt(self)
+                }
             }
         )*
     };
 }
 
-impl_tensor_number!(i8, i16, i32, i64, i128, isize, f32, f64);
+impl_tensor_number!(f32, f64);
 
 pub trait TensorBase<T: TensorNumber> {
     fn shape(&self) -> Vec<usize>;

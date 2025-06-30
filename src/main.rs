@@ -7,11 +7,11 @@ use crate::numrust::{
 fn main() {
     println!("Hello, world!");
 
-    let mut t = Tensor::Tensor1::<i32>(10);
+    let mut t = Tensor::Tensor1::<f32>(10);
 
-    t.set(&[0], 1);
+    t.set(&[0], 1.0);
 
-    let mut t2 = &t * 2;
+    let mut t2 = &t * 2.0;
 
     let mut t3 = t2.dot(&t2);
 
@@ -22,18 +22,6 @@ fn main() {
     println!("{}", t2.to_string());
     println!("{}", t3.to_string());
     println!("{:?}", t.shape());
-
-    let t5 = Tensor2::from_vec(vec![2, 4], vec![1, 2, 3, 4, 5, 6, 7, 8]);
-
-    println!("{}", t5.to_string());
-
-    let mut t6 = t5.transpose();
-
-    println!("{}", t6.to_string());
-
-    let mut t7 = t5.mult(&t6);
-
-    println!("{}", t7.to_string());
 
     let mut identity = Tensor2::<f64>::identity(10) * 2.0;
 
